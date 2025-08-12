@@ -7,6 +7,11 @@ namespace LibraryTask.Config
     {
         public DbSet<Book> Books { get; set; }
 
+        public DatabaseContext(DbContextOptions<DatabaseContext> options)
+       : base(options)
+        {
+        }
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseInMemoryDatabase("BookDb");

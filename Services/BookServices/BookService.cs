@@ -1,83 +1,142 @@
 ﻿using LibraryTask.Config;
 using LibraryTask.Models.Entities.Book;
+using LibraryTask.Utils;
+using LibraryTask.Utils.Constants;
+using Microsoft.EntityFrameworkCore;
 
 namespace LibraryTask.Services.BookServices
 {
     public class BookService : IBookService
     {
-        public static bool PublishedYearIsValid(int year)
+        private readonly DatabaseContext _db;
+        private readonly ILogger<BookService> _logger;
+
+        public BookService(DatabaseContext db, ILogger<BookService> logger)
         {
-            var today = DateTime.Now;
-            return year <= today.Year;
+            _db = db;
+            _logger = logger;
         }
 
-        public static async Task<Book> AddNewBook(Book newBook, DatabaseContext db, ILogger logger)
+        public async Task<ServiceResult<Book>> AddNewBook(Book newBook)
         {
-            if (!PublishedYearIsValid(newBook.PublishedYear))
+            if (!BookUtils.PublishedYearIsValid(newBook.PublishedYear))
             {
-                logger.LogInformation("AddNewBook: Unable to add book - invalid year.");
-                throw new ArgumentException("Invalid year.");
+                _logger.LogInformation("AddNewBook: Unable to add book - invalid year.");
+                return ServiceResult<Book>.Fail(ErrorMessages.InvalidYear);
+            }
+
+            if (await BookUtils.IsbnExists(newBook.ISBN, _db)) {
+                _logger.LogInformation("AddNewBook: Unable to add book - ISBN already in use.");
+                return ServiceResult<Book>.Fail(ErrorMessages.IsbnAlreadyExists);
             }
 
             try
             {
-                db.Add(newBook);
-                await db.SaveChangesAsync();
+                _db.Add(newBook);
+                await _db.SaveChangesAsync();
             }
             catch (Exception ex) {
-                logger.LogInformation($"AddNewBook: Unable to add book - {ex}");
-                throw new Exception("Unable to add book.");
+                _logger.LogInformation($"AddNewBook: Unable to add book - {ex}");
+                return ServiceResult<Book>.Fail(ErrorMessages.DatabaseAddError);
             }
 
-            var book = await GetBook(newBook.Id, db, logger);
+            var book = await GetBook(newBook.Id);
 
-            return book;
+            return ServiceResult<Book>.Ok(book);
         }
 
-        public static async Task<List<Book>> GetAllBooks(DatabaseContext db, ILogger logger) {
-            var books = db.Set<Book>().ToList();
+        public async Task<List<Book>> GetAllBooks(int page, int take) {
+            var books = await _db.Set<Book>()
+                .OrderBy(book => book.Title)
+                .ThenBy(book => book.PublishedYear)
+                .Skip(take * (page - 1))
+                .Take(take)
+                .ToListAsync();
             return books;
         }
 
-        public static async Task<Book> GetBook(int id, DatabaseContext db, ILogger logger)
+        public async Task<Book> GetBook(int id)
         {
-            var book = db.Set<Book>()
-                .FirstOrDefault(i => i.Id == id);
+            var book = await _db.Set<Book>()
+                .FirstOrDefaultAsync(i => i.Id == id);
             return book;
         }
 
-        public static async Task<bool> DeleteBook(int id, DatabaseContext db, ILogger logger)
+        public async Task<ServiceResult<object>> DeleteBook(int id)
         {
-            var book = await GetBook(id, db, logger);
+            var book = await GetBook(id);
             if (book == null)
             {
-                return false;
+                return ServiceResult<object>.Fail(ErrorMessages.BookNotFound);
             }
 
             try
             {
-                db.Remove(book);
-                await db.SaveChangesAsync();
-                return true;
+                _db.Remove(book);
+                await _db.SaveChangesAsync();
+                return ServiceResult<object>.Ok(null);
             }
             catch (Exception ex)
             {
-                logger.LogError($"DeleteBook: Unable to delete book {id}");
-                throw;
+                _logger.LogError($"DeleteBook: Unable to delete book {id}");
+                return ServiceResult<object>.Fail(ErrorMessages.DatabaseDeleteError);
             }
         }
 
-        public static async Task<Book> UpdateBook(Book updatedBook, int id,  DatabaseContext db, ILogger logger)
+        public async Task<ServiceResult<Book>> UpdateBook(Book updatedBook, int id)
         {
-            var book = await GetBook(id, db, logger);
+            if (updatedBook.Id != id)
+            {
+                return ServiceResult<Book>.Fail(ErrorMessages.ConflictInId);
+            }
+
+            if (!BookUtils.PublishedYearIsValid(updatedBook.PublishedYear))
+            {
+                return ServiceResult<Book>.Fail(ErrorMessages.InvalidYear);
+            }
+
+            if (await BookUtils.IsbnExists(updatedBook.ISBN, _db))
+            {
+                _logger.LogInformation("UpdateBook: Unable to add book - ISBN already in use.");
+                return ServiceResult<Book>.Fail(ErrorMessages.IsbnAlreadyExists);
+            }
+
+            var book = await GetBook(id);
             if (book == null)
             {
-                return false;
+                return ServiceResult<Book>.Fail(ErrorMessages.BookNotFound);
             }
 
+            try
+            {
+                book.Title = updatedBook.Title;
+                book.ISBN = updatedBook.ISBN;
+                book.PublishedYear = updatedBook.PublishedYear;
+                book.AuthorId = updatedBook.AuthorId;
+                await _db.SaveChangesAsync();
+            }
+            catch (Exception ex) {
+                _logger.LogError($"Unable to update book {id}");
+                return ServiceResult<Book>.Fail(ErrorMessages.DatabaseUpdateError);
+            }
 
+            return ServiceResult<Book>.Ok(book);
         }
-
-
     }
+}
+
+
+
+public class ServiceResult<T>
+{
+    public bool Success { get; set; }
+    public string ErrorMessage { get; set; }
+    public T Result { get; set; }
+
+    public static ServiceResult<T> Ok(T? result) =>
+        new ServiceResult<T> { Success = true, Result = result };
+
+    public static ServiceResult<T> Fail(string error) =>
+     new ServiceResult<T> { Success = false, ErrorMessage = error };
+
 }

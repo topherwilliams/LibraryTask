@@ -7,7 +7,5 @@
         int AuthorId { get; set; }
         int PublishedYear { get; set; }
         string ISBN { get; set; }
-
-
     }
 }

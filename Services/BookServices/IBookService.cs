@@ -5,8 +5,10 @@ namespace LibraryTask.Services.BookServices
 {
     public interface IBookService
     {
-        //Task<Book> AddNewBook(Book newBook, DatabaseContext db, ILogger logger);
-        //Task<List<Book>> GetAllBooks(DatabaseContext db, ILogger logger);
-
+        Task<ServiceResult<Book>> AddNewBook(Book newBook);
+        Task<List<Book>> GetAllBooks(int page, int take);
+        Task<Book> GetBook(int id);
+        Task<ServiceResult<object>> DeleteBook(int id);
+        Task<ServiceResult<Book>> UpdateBook(Book updatedBook, int id);
     }
 }

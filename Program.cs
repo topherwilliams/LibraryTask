@@ -1,4 +1,5 @@
 using LibraryTask.Config;
+using LibraryTask.Models.Entities.Book;
 using LibraryTask.Services.BookServices;
 using Serilog;
 
@@ -21,6 +22,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<DatabaseContext>();
 builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<IBook, Book>();
 
 
 var app = builder.Build();
