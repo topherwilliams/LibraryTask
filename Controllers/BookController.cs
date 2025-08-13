@@ -1,34 +1,30 @@
 ﻿using LibraryTask.Config;
+using LibraryTask.Models.DTOs;
 using LibraryTask.Models.Entities.Book;
-using LibraryTask.Services.BookServices;
+using LibraryTask.Services.BookService;
 using LibraryTask.Utils.Constants;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 
 namespace LibraryTask.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize]
     [ApiController]
-    public class BookController : Controller
+    public class BookController : BaseController<BookController>
     {
-        //TODO: 'Production ready' - Would want logging (even basic), authorization
-
-        private readonly ILogger _logger;
-        private readonly DatabaseContext _dbContext;
         private readonly IBookService _bookService;
 
-        public BookController(ILogger<BookController> logger, DatabaseContext dbContext, IBookService bookService) 
+        public BookController(ILogger<BookController> logger, DatabaseContext dbContext, IBookService bookService) :  base(logger, dbContext)
         {
-            this._logger = logger;
-            this._dbContext = dbContext;
             this._bookService = bookService;
         }
 
         [HttpGet]   
         public async Task<List<Book>> GetAllBooksAsync([FromQuery] int page = 1, [FromQuery] int take = 10)
         {
-            var books = await _bookService.GetAllBooks(page, take);
-            return books;
+            return await _bookService.GetAllBooks(page, take);
         }
 
         [HttpGet("{id}")]
@@ -61,12 +57,7 @@ namespace LibraryTask.Controllers
 
             if (!res.Success)
             {
-                return res.ErrorMessage switch
-                {
-                    ErrorMessages.IsbnAlreadyExists => Conflict(res.ErrorMessage),
-                    ErrorMessages.BookNotFound => NotFound(res.ErrorMessage),
-                    _ => BadRequest(res.ErrorMessage),
-                };
+                return ResolveServiceResultErrorToIActionResult(res.ErrorMessage);
             }
 
             return Ok(res.Result);
@@ -78,13 +69,19 @@ namespace LibraryTask.Controllers
             var res = await _bookService.DeleteBook(id);
             if (!res.Success)
             {
-                return res.ErrorMessage switch
-                {
-                    ErrorMessages.BookNotFound => NotFound(res.ErrorMessage),
-                    _ => BadRequest(res.ErrorMessage)
-                };
+                return ResolveServiceResultErrorToIActionResult(res.ErrorMessage);
             }
             return Ok( new { message = "Book deleted"});
+        }
+
+        protected IActionResult ResolveServiceResultErrorToIActionResult(string errorMessage)
+        {
+            return errorMessage switch
+            {
+                ErrorMessages.IsbnAlreadyExists => Conflict(errorMessage),
+                ErrorMessages.BookNotFound => NotFound(errorMessage),
+                _ => BadRequest(errorMessage),
+            };
         }
     }
 }

@@ -1,11 +1,8 @@
 ﻿using LibraryTask.Config;
-using LibraryTask.Models.Entities.Book;
-using LibraryTask.Services.BookServices;
+using LibraryTask.Services.BookService;
 using LibraryTask.Utils;
-using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Moq;
-using System.Net.Sockets;
 using Xunit;
 
 namespace LibraryTask.Tests
@@ -63,9 +60,45 @@ namespace LibraryTask.Tests
         }
 
         [Fact]
+        public async void Test_CheckIBSN_UniqueValue_ReturnsFalse()
+        {
+            var bookList = TestUtils.CreateRandomBookSet(1);
+            var options = new DbContextOptionsBuilder<DatabaseContext>()
+                .UseInMemoryDatabase(databaseName: "TestingDb")
+                .Options;
+
+            using var context = new DatabaseContext(options);
+            context.Books.AddRange(bookList);
+            context.SaveChanges();
+
+            var res = await BookUtils.IsbnExists("1", context);
+
+            Assert.NotNull(res);
+            Assert.False(res);
+        }
+
+        [Fact]
+        public async void Test_CheckIBSN_DuplicateValue_ReturnsTrue()
+        {
+            var bookList = TestUtils.CreateRandomBookSet(1);
+            var options = new DbContextOptionsBuilder<DatabaseContext>()
+                .UseInMemoryDatabase(databaseName: "TestingDb")
+                .Options;
+
+            using var context = new DatabaseContext(options);
+            context.Books.AddRange(bookList);
+            context.SaveChanges();
+
+            var res = await BookUtils.IsbnExists("0", context);
+
+            Assert.NotNull(res);
+            Assert.True(res);
+        }
+
+        [Fact]
         public async void Test_GetBooks_Pagination_TakeValue()
         {
-            var bookList = CreateRandomBookSet(20);
+            var bookList = TestUtils.CreateRandomBookSet(20);
 
             var options = new DbContextOptionsBuilder<DatabaseContext>()
                 .UseInMemoryDatabase(databaseName: "TestingDb")
@@ -82,30 +115,8 @@ namespace LibraryTask.Tests
 
             Assert.NotNull(result);
             Assert.Equal(10, result.Count);
-
         }
-
-        public List<Book> CreateRandomBookSet(int numberOfBooks)
-        {
-            var list = new List<Book>();
-            for (int i = 0; i <= numberOfBooks; i++)
-            {
-                list.Add(
-                    new Book
-                    {
-                        Title = $"Book {i}",
-                        AuthorId = 1,
-                        ISBN = i.ToString(),
-                        PublishedYear = 1999
-                    }
-                );
-            }
-            return list;
-        }
-
     }
-
-
 }
 
 

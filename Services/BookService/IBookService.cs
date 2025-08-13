@@ -1,7 +1,8 @@
 ﻿using LibraryTask.Config;
+using LibraryTask.Models.DTOs;
 using LibraryTask.Models.Entities.Book;
 
-namespace LibraryTask.Services.BookServices
+namespace LibraryTask.Services.BookService
 {
     public interface IBookService
     {

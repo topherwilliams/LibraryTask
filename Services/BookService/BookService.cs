@@ -1,42 +1,36 @@
 ﻿using LibraryTask.Config;
+using LibraryTask.Models.DTOs;
 using LibraryTask.Models.Entities.Book;
 using LibraryTask.Utils;
 using LibraryTask.Utils.Constants;
 using Microsoft.EntityFrameworkCore;
 
-namespace LibraryTask.Services.BookServices
+namespace LibraryTask.Services.BookService
 {
-    public class BookService : IBookService
+    public class BookService : BaseService<BookService>, IBookService
     {
-        private readonly DatabaseContext _db;
-        private readonly ILogger<BookService> _logger;
-
-        public BookService(DatabaseContext db, ILogger<BookService> logger)
-        {
-            _db = db;
-            _logger = logger;
-        }
+        public BookService(DatabaseContext db, ILogger<BookService> logger): base(db, logger) {}
 
         public async Task<ServiceResult<Book>> AddNewBook(Book newBook)
         {
             if (!BookUtils.PublishedYearIsValid(newBook.PublishedYear))
             {
-                _logger.LogInformation("AddNewBook: Unable to add book - invalid year.");
+                Logger.LogInformation($"AddNewBook: Unable to add book - {ErrorMessages.InvalidYear}");
                 return ServiceResult<Book>.Fail(ErrorMessages.InvalidYear);
             }
 
-            if (await BookUtils.IsbnExists(newBook.ISBN, _db)) {
-                _logger.LogInformation("AddNewBook: Unable to add book - ISBN already in use.");
+            if (await BookUtils.IsbnExists(newBook.ISBN, Db)) {
+                Logger.LogInformation($"AddNewBook: Unable to add book - {ErrorMessages.IsbnAlreadyExists}");
                 return ServiceResult<Book>.Fail(ErrorMessages.IsbnAlreadyExists);
             }
 
             try
             {
-                _db.Add(newBook);
-                await _db.SaveChangesAsync();
+                Db.Add(newBook);
+                await Db.SaveChangesAsync();
             }
             catch (Exception ex) {
-                _logger.LogInformation($"AddNewBook: Unable to add book - {ex}");
+                Logger.LogError($"AddNewBook: Unable to add book - {ex}");
                 return ServiceResult<Book>.Fail(ErrorMessages.DatabaseAddError);
             }
 
@@ -46,7 +40,7 @@ namespace LibraryTask.Services.BookServices
         }
 
         public async Task<List<Book>> GetAllBooks(int page, int take) {
-            var books = await _db.Set<Book>()
+            var books = await Db.Set<Book>()
                 .OrderBy(book => book.Title)
                 .ThenBy(book => book.PublishedYear)
                 .Skip(take * (page - 1))
@@ -57,7 +51,7 @@ namespace LibraryTask.Services.BookServices
 
         public async Task<Book> GetBook(int id)
         {
-            var book = await _db.Set<Book>()
+            var book = await Db.Set<Book>()
                 .FirstOrDefaultAsync(i => i.Id == id);
             return book;
         }
@@ -72,13 +66,13 @@ namespace LibraryTask.Services.BookServices
 
             try
             {
-                _db.Remove(book);
-                await _db.SaveChangesAsync();
+                Db.Remove(book);
+                await Db.SaveChangesAsync();
                 return ServiceResult<object>.Ok(null);
             }
             catch (Exception ex)
             {
-                _logger.LogError($"DeleteBook: Unable to delete book {id}");
+                Logger.LogError($"DeleteBook: Unable to delete book {id} - {ex}");
                 return ServiceResult<object>.Fail(ErrorMessages.DatabaseDeleteError);
             }
         }
@@ -92,12 +86,13 @@ namespace LibraryTask.Services.BookServices
 
             if (!BookUtils.PublishedYearIsValid(updatedBook.PublishedYear))
             {
+                Logger.LogInformation($"UpdateBook: Unable to add book - {ErrorMessages.InvalidYear}.");
                 return ServiceResult<Book>.Fail(ErrorMessages.InvalidYear);
             }
 
-            if (await BookUtils.IsbnExists(updatedBook.ISBN, _db))
+            if (await BookUtils.IsbnExists(updatedBook.ISBN, Db))
             {
-                _logger.LogInformation("UpdateBook: Unable to add book - ISBN already in use.");
+                Logger.LogInformation($"UpdateBook: Unable to add book - {ErrorMessages.IsbnAlreadyExists}.");
                 return ServiceResult<Book>.Fail(ErrorMessages.IsbnAlreadyExists);
             }
 
@@ -113,30 +108,14 @@ namespace LibraryTask.Services.BookServices
                 book.ISBN = updatedBook.ISBN;
                 book.PublishedYear = updatedBook.PublishedYear;
                 book.AuthorId = updatedBook.AuthorId;
-                await _db.SaveChangesAsync();
+                await Db.SaveChangesAsync();
             }
             catch (Exception ex) {
-                _logger.LogError($"Unable to update book {id}");
+                Logger.LogError($"UpdateBook: Unable to update book {id} - {ex}");
                 return ServiceResult<Book>.Fail(ErrorMessages.DatabaseUpdateError);
             }
 
             return ServiceResult<Book>.Ok(book);
         }
     }
-}
-
-
-
-public class ServiceResult<T>
-{
-    public bool Success { get; set; }
-    public string ErrorMessage { get; set; }
-    public T Result { get; set; }
-
-    public static ServiceResult<T> Ok(T? result) =>
-        new ServiceResult<T> { Success = true, Result = result };
-
-    public static ServiceResult<T> Fail(string error) =>
-     new ServiceResult<T> { Success = false, ErrorMessage = error };
-
 }
